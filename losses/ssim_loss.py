@@ -8,11 +8,14 @@ use_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if use_cuda else 'cpu')
 
 
+# 计算一维的高斯分布向量
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size // 2)**2 / float(2 * sigma**2)) for x in range(window_size)])
     return gauss / gauss.sum()
 
 
+# 创建高斯核，通过两个一维高斯分布向量进行矩阵乘法得到
+# channel就是图像的通道数
 def create_window(window_size, channel):
     _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
     _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
@@ -20,12 +23,16 @@ def create_window(window_size, channel):
     return window
 
 
+# 计算SSIM
+# 直接使用SSIM的公式，但是在计算均值时，不是直接求像素平均值，而是采用归一化的高斯核卷积来代替。
+# 在计算方差和协方差时用到了公式Var(X)=E[X^2]-E[X]^2, cov(X,Y)=E[XY]-E[X]E[Y].
+# 正如前面提到的，上面求期望的操作采用高斯核卷积代替。
 def _ssim(img1, img2, window, window_size, channel, size_average=True):
     mu1 = F.conv2d(img1, window, padding=window_size // 2, groups=channel)
     mu2 = F.conv2d(img2, window, padding=window_size // 2, groups=channel)
 
-    mu1_sq = mu1.pow(2)
-    mu2_sq = mu2.pow(2)
+    mu1_sq = mu1.pow(2)# 加平方 
+    mu2_sq = mu2.pow(2)# 加平方 
     mu1_mu2 = mu1 * mu2
 
     sigma1_sq = F.conv2d(img1 * img1, window, padding=window_size // 2, groups=channel) - mu1_sq
@@ -49,7 +56,7 @@ class SSIM(torch.nn.Module):
         super(SSIM, self).__init__()
         self.window_size = window_size
         self.size_average = size_average
-        self.channel = 1
+        self.channel = 1 # 假设通道数目是一 
         self.window = create_window(window_size, self.channel)
 
     def forward(self, img1, img2):
